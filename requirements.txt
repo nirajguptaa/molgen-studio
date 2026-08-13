@@ -1,0 +1,10 @@
+rdkit
+requests
+anthropic
+faiss-cpu
+sentence-transformers
+transformers
+torch
+streamlit
+py3Dmol
+pytest
