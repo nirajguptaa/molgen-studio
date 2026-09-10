@@ -8,3 +8,9 @@ torch
 streamlit
 py3Dmol
 pytest
+
+google-genai
+python-dotenv
+faiss-cpu
+
+pandas

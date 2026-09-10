@@ -2,11 +2,11 @@ from src import input_handler, protein_pipeline, molecule_generator, validator, 
 from src.schemas import Candidate
 
 
-def run(raw_target: str, n_candidates: int = 50, reinvent_config: str | None = None) -> list[Candidate]:
+def run(raw_target: str, n_candidates: int = 50) -> list[Candidate]:
     target = input_handler.resolve_target(raw_target)
     features = protein_pipeline.get_protein_features(target)
 
-    candidates = molecule_generator.generate(features, n=n_candidates, reinvent_config=reinvent_config)
+    candidates = molecule_generator.generate(features, n=n_candidates)
     candidates = validator.sanitize_and_dedupe(candidates)
     candidates = validator.synthetic_accessibility(candidates)
     candidates = validator.embed_3d(candidates)
