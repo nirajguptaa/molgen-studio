@@ -37,18 +37,22 @@ def build_run_summary(target_raw: str, pdb_id: str | None, candidates: list[Cand
     avg_qed = sum(c.qed or 0 for c in candidates) / n
     avg_sa = sum(c.sa_score or 0 for c in candidates) / n
     sources = {c.source for c in candidates}
-    top = sorted(candidates, key=lambda c: c.qed or 0, reverse=True)[:5]
+    ranked = sorted(candidates, key=lambda c: c.qed or 0, reverse=True)
     top_lines = "\n".join(
         f"  {i+1}. {c.smiles} | QED={c.qed} SA={c.sa_score} "
-        f"MW={c.admet.get('mw')} LogP={c.admet.get('logp')}"
-        for i, c in enumerate(top)
+        f"MW={c.admet.get('mw')} LogP={c.admet.get('logp')} "
+        f"TPSA={c.admet.get('tpsa')} RotB={c.admet.get('rotatable_bonds')} "
+        f"LipinskiViol={c.admet.get('lipinski_violations')} "
+        f"VeberViol={c.admet.get('veber_violations')} "
+        f"Vina={c.admet.get('vina_score_kcal_mol', 'not run')} kcal/mol"
+        for i, c in enumerate(ranked)
     )
     return (
         f"Target: {target_raw} (PDB {pdb_id or 'unresolved'})\n"
         f"Candidates surviving filters: {n}\n"
         f"Generation source(s): {', '.join(sources)}\n"
         f"Average QED: {avg_qed:.3f} | Average SA score: {avg_sa:.2f}\n"
-        f"Top candidates by QED:\n{top_lines}"
+        f"All candidates ranked by QED:\n{top_lines}"
     )
 
 
@@ -77,7 +81,6 @@ def ask(question: str, run_summary: str, history: list[dict]) -> str:
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             max_output_tokens=1024,
-            temperature=0.3,
         ),
     )
 

@@ -2,10 +2,10 @@
 
 Two tiers, chosen automatically per target -- never hardcoded to one file:
 
-1. TRAINED: if data/<target>_generated.csv exists (exported from a completed
-   REINVENT4 Kaggle run for that specific target), use it. This is the
-   highest-quality path: molecules were RL-trained against that target's
-   ChEMBL actives.
+1. REINVENT4 CSV: if data/<target>_generated.csv exists, use its SMILES
+   column. The file format is consistent with a REINVENT4 output, but this
+   project does not contain model checkpoints or training metadata to verify
+   the training run or its target conditioning.
 
 2. EXPLORATORY (fallback): if no trained CSV exists for the target yet,
    generate a fresh combinatorial library with RDKit's BRICS algorithm
@@ -82,7 +82,7 @@ def _load_trained(path: Path, n: int) -> list[Candidate]:
         reader = csv.DictReader(f)
         rows = list(reader)[:n]
     return [
-        Candidate(smiles=row["SMILES"], source="reinvent4_trained")
+        Candidate(smiles=row["SMILES"], source="reinvent4_csv")
         for row in rows
         if row.get("SMILES")
     ]
@@ -94,7 +94,9 @@ def _fragment_pool() -> list[Chem.Mol]:
         mol = Chem.MolFromSmiles(smi)
         if mol is not None:
             frags |= BRICS.BRICSDecompose(mol)
-    mols = [Chem.MolFromSmiles(f) for f in frags]
+    # BRICSDecompose returns a set; sort before target-seeded shuffling so
+    # identical targets produce the same library across Python processes.
+    mols = [Chem.MolFromSmiles(f) for f in sorted(frags)]
     return [m for m in mols if m is not None]
 
 
@@ -116,7 +118,9 @@ def _generate_exploratory(target_key: str, n: int) -> list[Candidate]:
     subset_size = max(4, int(len(pool) * frac))
     subset = pool[:subset_size]
 
-    builder = BRICS.BRICSBuild(subset)
+    # We already shuffled the target-specific subset with a local seeded RNG.
+    # Disable BRICSBuild's global-random reagent shuffle to keep runs stable.
+    builder = BRICS.BRICSBuild(subset, scrambleReagents=False)
     seen_smiles = set()
     out = []
     for mol in itertools.islice(builder, _MAX_BRICS_ITERATIONS):

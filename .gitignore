@@ -7,3 +7,5 @@ data/conformers/
 .DS_Store
 venv/
 *.egg-info/
+tools/vina/
+data/docking/
