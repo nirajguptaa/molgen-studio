@@ -27,6 +27,10 @@ GEMINI_MODEL = "gemini-3.6-flash"
 
 SYSTEM_PROMPT = """You explain computational drug candidate predictions to a \
 non-specialist reader. Ground every claim in the provided literature snippets. \
+The candidate molecules were not measured in the supplied assays, so target \
+literature is background context and is not evidence that this candidate binds \
+or inhibits the target. A Vina score, if present, is an approximate docking \
+scoring-function result, not an experimental binding affinity. \
 Never state or imply the molecule is safe, effective, or clinically validated \
 -- frame everything as a computational prediction requiring experimental \
 follow-up. Keep explanations to 3-4 sentences."""
@@ -48,6 +52,10 @@ class RetrievalIndex:
     def retrieve(self, query: str, k: int = 3) -> list[str]:
         query_vec = self.vectorizer.transform([query]).toarray().astype("float32")
         k = min(k, len(self.texts))
+        if not query_vec.any():
+            # The corpus is already target-specific; an all-OOV query should
+            # return deterministic context rather than arbitrary tied results.
+            return self.texts[:k]
         _, indices = self.index.search(query_vec, k)
         return [self.texts[i] for i in indices[0] if i < len(self.texts)]
 
@@ -85,10 +93,13 @@ def explain(candidate: Candidate, features: ProteinFeatures, index: RetrievalInd
         f"Candidate SMILES: {candidate.smiles}\n"
         f"Target: {features.target.raw_input}\n"
         f"QED: {candidate.qed}, SA score: {candidate.sa_score}\n"
+        f"Vina docking score (if run): {candidate.admet.get('vina_score_kcal_mol', 'not run')} kcal/mol\n"
         f"ADMET flags: {candidate.admet}\n\n"
         f"Relevant literature:\n{context_block}\n\n"
-        "Explain in 3-4 sentences why this candidate might be relevant "
-        "to the target, and note any ADMET concerns."
+        "In 3-4 sentences, describe the candidate's reported computational "
+        "properties and any local rule-screen flags. State that the retrieved "
+        "target literature is background context and does not report testing "
+        "this candidate or establish target binding."
     )
 
     client = genai.Client(api_key=api_key)
@@ -98,7 +109,6 @@ def explain(candidate: Candidate, features: ProteinFeatures, index: RetrievalInd
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             max_output_tokens=2048,
-            temperature=0.4,
         ),
     )
 

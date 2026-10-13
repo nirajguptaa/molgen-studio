@@ -1,25 +1,22 @@
-"""Filters candidates on toxicity/pharmacokinetics.
+"""Applies local physicochemical rules and optionally calls ADMETlab.
 
-Primary: ADMETlab 3.0 live API (single-molecule endpoint, confirmed against
-their real OpenAPI schema). As of testing, their production API has a
-server-side bug (missing 'BSEP' column) causing 500 errors on some/all
-requests. This module treats the API as best-effort: on any failure it logs
-a warning and falls back to the local RDKit Lipinski/Veber pre-filter,
-which is always available and requires no network call.
+Primary: local RDKit Lipinski/Veber rules, available without network access.
+An optional ADMETlab API path is retained as best-effort because the service
+currently reports service instability; failures fall back to local rules.
+The local rules are simple physicochemical filters, not toxicity or PK models.
 """
 
 import logging
 import time
 import requests
 from rdkit import Chem
-from rdkit.Chem import Descriptors, Lipinski
+from rdkit.Chem import Descriptors, Lipinski, rdMolDescriptors
 from src.schemas import Candidate
 
 logger = logging.getLogger(__name__)
 
 ADMETLAB_URL = "https://admetlab3.scbdd.com/api/single/admet"
 REQUEST_TIMEOUT = 30
-RETRY_DELAY_SEC = 1.0
 
 
 def lipinski_prefilter(candidates: list[Candidate]) -> list[Candidate]:
@@ -29,18 +26,25 @@ def lipinski_prefilter(candidates: list[Candidate]) -> list[Candidate]:
         mol = Chem.MolFromSmiles(c.smiles)
         if mol is None:
             continue
-        violations = sum([
+        lipinski_violations = sum([
             Descriptors.MolWt(mol) > 500,
             Descriptors.MolLogP(mol) > 5,
             Lipinski.NumHDonors(mol) > 5,
             Lipinski.NumHAcceptors(mol) > 10,
         ])
+        veber_violations = sum([
+            rdMolDescriptors.CalcNumRotatableBonds(mol) > 10,
+            rdMolDescriptors.CalcTPSA(mol) > 140,
+        ])
         c.admet["mw"] = round(Descriptors.MolWt(mol), 1)
         c.admet["logp"] = round(Descriptors.MolLogP(mol), 2)
         c.admet["h_donors"] = Lipinski.NumHDonors(mol)
         c.admet["h_acceptors"] = Lipinski.NumHAcceptors(mol)
-        c.admet["lipinski_violations"] = violations
-        if violations <= 1:  # Lipinski allows one violation
+        c.admet["rotatable_bonds"] = rdMolDescriptors.CalcNumRotatableBonds(mol)
+        c.admet["tpsa"] = round(rdMolDescriptors.CalcTPSA(mol), 1)
+        c.admet["lipinski_violations"] = lipinski_violations
+        c.admet["veber_violations"] = veber_violations
+        if lipinski_violations <= 1 and veber_violations == 0:
             c.admet_pass = True
             passed.append(c)
         else:
@@ -65,7 +69,7 @@ def _call_admetlab(smiles: str) -> dict | None:
         return None
 
 
-def admet_screen(candidates: list[Candidate], use_live_api: bool = True) -> list[Candidate]:
+def admet_screen(candidates: list[Candidate], use_live_api: bool = False) -> list[Candidate]:
     """Screens candidates via ADMETlab if available, else falls back to
     the local Lipinski pre-filter for all candidates.
 
@@ -86,8 +90,8 @@ def admet_screen(candidates: list[Candidate], use_live_api: bool = True) -> list
 
     if live_failures == len(candidates):
         logger.warning(
-            "ADMETlab API unavailable for all candidates (confirmed server-side "
-            "bug as of last check). Falling back to local RDKit Lipinski/Veber filter."
+            "ADMETlab API unavailable for all candidates. Falling back to local "
+            "RDKit Lipinski/Veber rules."
         )
         return lipinski_prefilter(candidates)
 

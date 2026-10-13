@@ -2,7 +2,7 @@
 
 from rdkit import Chem
 from rdkit.Chem import AllChem, QED
-from rdkit.Chem import rdMolDescriptors
+from rdkit.Contrib.SA_Score import sascorer
 from src.schemas import Candidate
 
 
@@ -45,11 +45,8 @@ def embed_3d(candidates: list[Candidate], out_dir: str = "data/conformers") -> l
 
 
 def synthetic_accessibility(candidates: list[Candidate]) -> list[Candidate]:
-    # placeholder proxy until sascorer.py (from RDKit contrib) is vendored in;
-    # ring count + rotatable bonds as a rough stand-in, replace before Review 3
+    """Assign the Ertl/Schuffenhauer fragment-based SA score (1=easier, 10=harder)."""
     for c in candidates:
         mol = Chem.MolFromSmiles(c.smiles)
-        rings = rdMolDescriptors.CalcNumRings(mol)
-        rot = rdMolDescriptors.CalcNumRotatableBonds(mol)
-        c.sa_score = round(1 + 0.3 * rings + 0.2 * rot, 2)
+        c.sa_score = round(float(sascorer.calculateScore(mol)), 2)
     return candidates
