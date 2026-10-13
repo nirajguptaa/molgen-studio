@@ -1,0 +1,9 @@
+reference_ligand = BAX
+reference_chain = A
+receptor_chain = A
+center_x = 75.153
+center_y = 44.833
+center_z = 65.026
+size_x = 23.647
+size_y = 27.478
+size_z = 25.595

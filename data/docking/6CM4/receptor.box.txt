@@ -1,0 +1,9 @@
+reference_ligand = 8NU
+reference_chain = A
+receptor_chain = A
+center_x = 9.925
+center_y = 5.846
+center_z = -9.582
+size_x = 20.757
+size_y = 23.715
+size_z = 28.815

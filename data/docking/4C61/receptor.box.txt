@@ -1,0 +1,9 @@
+reference_ligand = LMM
+reference_chain = A
+receptor_chain = A
+center_x = 13.987
+center_y = 3.706
+center_z = 41.475
+size_x = 23.460
+size_y = 20.349
+size_z = 21.998
